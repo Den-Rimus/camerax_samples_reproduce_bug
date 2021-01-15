@@ -23,6 +23,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
 import android.hardware.display.DisplayManager
 import android.media.MediaScannerConnection
@@ -31,10 +32,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.KeyEvent
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.webkit.MimeTypeMap
 import android.widget.ImageButton
 import androidx.camera.core.AspectRatio
@@ -52,8 +50,10 @@ import androidx.camera.view.PreviewView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.net.toFile
+import androidx.core.view.children
 import androidx.core.view.setPadding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.Navigation
@@ -270,6 +270,25 @@ class CameraFragment : Fragment() {
         // Get screen metrics used to setup camera for full screen resolution
         val metrics = DisplayMetrics().also { viewFinder.display.getRealMetrics(it) }
         Log.d(TAG, "Screen metrics: ${metrics.widthPixels} x ${metrics.heightPixels}")
+
+        viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        if (context is LifecycleOwner) {
+            viewFinder.previewStreamState.observe(context as LifecycleOwner, { state ->
+                if (state == PreviewView.StreamState.STREAMING) {
+                    viewFinder.children.toList().find { it is TextureView }?.let {
+                        val textureView = it as TextureView
+                        Matrix().apply {
+                            // any call to `textureView.setTransform(myMatrix)` results in
+                            // corrupter preview image on front camera in landscape orientation
+                            // even if no actual transformation was made (as well as with one)
+//                            setScale(-1f, 1f, metrics.widthPixels.toFloat() / 2,
+//                                metrics.heightPixels.toFloat() / 2) // some scaling, e.g. de-mirroring front camera
+                            textureView.setTransform(this)
+                        }
+                    }
+                }
+            })
+        }
 
         val screenAspectRatio = aspectRatio(metrics.widthPixels, metrics.heightPixels)
         Log.d(TAG, "Preview aspect ratio: $screenAspectRatio")
